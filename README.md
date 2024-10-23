@@ -8,7 +8,7 @@ A [DOD (Doge-on-Doge)](https://dod.cool) worker that submits PoW answers to a mi
 MINER_ID=XXXX cargo run --release <hostname> <port>
 ```
 
-Where the default hostname is `localhost` and `port` is 3030.
+Where the default hostname is `localhost` and port is `3030`.
 
 The `MINER_ID` is how you identifier yourself with the mining pool.
 Or in other words, the mining pool decides whom to pay based on the `MINER_ID`.
@@ -38,7 +38,8 @@ $ curl http://localhost:3333/job
 Answer is submitted via HTTP POST, for example:
 
 ```
-$ curl -H 'content-type: application/json' -H 'miner-id: XXXXX' http://localhost:3030/answer -d '{"block_height":15871, "hash":"71020818e45de5fc516008f55b22bab7"}'
+$ curl -H 'content-type: application/json' -H 'miner-id: XXXXX' http://localhost:3030/answer \
+       -d '{"block_height":15871, "hash":"71020818e45de5fc516008f55b22bab7"}'
 ```
 
 It is up to the mining pool to check if the answer is correct, and how the rewards are split between miners.
