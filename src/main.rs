@@ -100,7 +100,7 @@ async fn task(
 #[async_std::main]
 async fn main() {
     let miner_id = std::env::var("MINER_ID").unwrap_or_else(|_| {
-        panic!("Please set your MINER_ID first, an alphanumeric string of 8 characters")
+        panic!("Please set your MINER_ID first.")
     });
     let args = std::env::args().collect::<Vec<_>>();
     let host = if args.len() >= 2 {
