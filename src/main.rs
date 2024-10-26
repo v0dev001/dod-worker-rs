@@ -10,7 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 #[derive(Debug, Serialize)]
 struct Response {
     block_height: usize,
-    hash: String,
+    nonce: String,
 }
 
 type Request = JobDesc;
@@ -57,9 +57,9 @@ fn bitwork_match_hash(hash: &str, target: &str, pre: usize, post: u8) -> bool {
     current_pre == target_pre && u8::from_str_radix(current_post, 16).unwrap() >= post
 }
 
-fn check_match(hex: [u8; 16], job: &Job) -> bool {
+fn check_match(nonce: [u8; 16], job: &Job) -> bool {
     let mut b = job.buffer.clone();
-    b[job.hex_start..job.hex_start + 16].copy_from_slice(&hex);
+    b[job.hex_start..job.hex_start + 16].copy_from_slice(&nonce);
     let digest = ring::digest::digest(&ring::digest::SHA256, &b);
     let digest = ring::digest::digest(&ring::digest::SHA256, digest.as_ref());
     let mut hash = (digest.as_ref() as &[u8]).to_vec();
@@ -86,11 +86,11 @@ async fn task(
         if tx.is_closed() || now > job.next_block_time as u128 {
             break;
         };
-        let mut hex: [u8; 16] = [0; 16];
-        rng.fill_bytes(&mut hex);
-        hex[0] = (hex[0] & mask) | pre;
-        if check_match(hex, &job) {
-            let _ = tx.unbounded_send(Some(hex)).ok();
+        let mut nonce: [u8; 16] = [0; 16];
+        rng.fill_bytes(&mut nonce);
+        nonce[0] = (nonce[0] & mask) | pre;
+        if check_match(nonce, &job) {
+            let _ = tx.unbounded_send(Some(nonce)).ok();
         }
     }
     let _ = metrics_tx.unbounded_send(count).ok();
@@ -149,9 +149,9 @@ async fn main() {
             let miner_id = miner_id.clone();
             std::thread::spawn(move || {
                 async_std::task::block_on(async {
-                    if let Some(hash) = start_hashing(&pool, req, Some(rx)).await {
-                        println!("Job {} done. Submitting hash {}", block_height, hash);
-                        let res = Response { block_height, hash };
+                    if let Some(nonce) = start_hashing(&pool, req, Some(rx)).await {
+                        println!("Job {} done. Submitting {}", block_height, nonce);
+                        let res = Response { block_height, nonce };
                         match minreq::post(&format!("{url}/answer"))
                             .with_json(&res)
                             .unwrap()
