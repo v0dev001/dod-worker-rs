@@ -42,6 +42,7 @@ $ curl -H 'content-type: application/json' -H 'miner-id: XXXXX' http://localhost
        -d '{"block_height":15871, "nonce":"71020818e45de5fc516008f55b22bab7"}'
 ```
 
+Note that even partial answers are submitted for the mining pool to account for miner contributions.
 It is up to the mining pool to check if the answer is correct, and how the rewards are split between miners.
 
 **Limitations**
