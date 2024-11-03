@@ -10,6 +10,12 @@ MINER_ID=XXXX cargo run --release <hostname> <port>
 
 Where the default hostname is `localhost` and port is `3030`.
 
+Alternatively, you can also run GPU mining by enabling the `gpu` feature, which requires OpenCL support.
+
+```
+MINER_ID=XXXX cargo run --features gpu --release <hostname> <port>
+```
+
 The `MINER_ID` is how you identifier yourself with the mining pool.
 Or in other words, the mining pool decides whom to pay based on the `MINER_ID`.
 You can run multiple workers under the same `MINER_ID`.
@@ -44,6 +50,14 @@ $ curl -H 'content-type: application/json' -H 'miner-id: XXXXX' http://localhost
 
 Note that even partial answers are submitted so that a pool can calculate each miner's contribution.
 It is up to the mining pool to check if a solution is correct, and to decide how the rewards are split between miners.
+
+**GPU Support**
+
+All OpenCL compatible GPU hardware should be supported, including Nvidia, AMD, Apple M1/M2/etc, and Intel Graphics.
+
+To compile this program with the `gpu` feature, you will need additional OpenCL libraries:
+- For Apple hardware, install the latest XCode in full.
+- For Nvidia, AMD or Intel, install the required drivers and developer libraries for your operating system.
 
 **Limitations**
 
