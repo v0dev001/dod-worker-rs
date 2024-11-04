@@ -100,7 +100,6 @@ fn task(
             .unwrap()
             .as_millis();
         if on_termination.is_closed() || now + 2000 > job.next_block_time as u128 {
-            println!("break");
             break;
         };
         let rng_seed: u64 = rng.next_u64();
