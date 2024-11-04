@@ -64,6 +64,7 @@ To compile this program with the `gpu` feature, you will need additional OpenCL 
 **Limitations**
 
 - The worker tries to guess available CPU cores which is usually the number of threads divided by 2, but it could be wrong.
-- The worker only uses HTTP not HTTPS, which is not secure.
+- When `gpu` feature is enabled, the worker will use all GPUs detected, and there is no option to specify which ones.
+- There is no option to use both CPU and GPU, for that you will need to start two instances of the worker.
 
 PRs are welcome!
