@@ -5,15 +5,15 @@ A [DOD (Doge-on-Doge)](https://dod.cool) worker that submits PoW answers to a mi
 **Usage**
 
 ```
-MINER_ID=XXXX cargo run --release <hostname> <port>
+cargo run --release -- [HOST|URL] --miner-id [MINER_ID] 
 ```
 
-Where the default hostname is `localhost` and port is `3030`.
+If either HOST or URL is not specified, it defaults to connect to `http://localhost:3030`.
 
 Alternatively, you can also run GPU mining by enabling the `gpu` feature, which requires OpenCL support.
 
 ```
-MINER_ID=XXXX cargo run --features gpu --release <hostname> <port>
+cargo run --features gpu --release -- [HOST|URL] --miner-id [MINER_ID]
 ```
 
 The `MINER_ID` is how you identifier yourself with the mining pool.
@@ -61,7 +61,7 @@ To compile this program with the `gpu` feature, you will need additional OpenCL 
 
 **Limitations**
 
-- The worker tries to guess available cores which is usually the number of threads divided by 2, but it could be wrong.
+- The worker tries to guess available CPU cores which is usually the number of threads divided by 2, but it could be wrong.
 - The worker only uses HTTP not HTTPS, which is not secure.
 
 PRs are welcome!

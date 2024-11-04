@@ -1,5 +1,6 @@
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures::StreamExt;
+use getopts::Options;
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 
@@ -72,26 +73,65 @@ pub trait Hasher: Clone {
     );
 }
 
+fn usage(program: &str, opts: &Options) {
+    let brief = format!("Usage: {} URL [options]", program);
+    print!("\n{}", opts.usage(&brief));
+}
+
 #[async_std::main]
 async fn main() {
-    let miner_id =
-        std::env::var("MINER_ID").unwrap_or_else(|_| panic!("Please set your MINER_ID first."));
-    let args = std::env::args().collect::<Vec<_>>();
-    let host = if args.len() >= 2 {
-        &args[1]
-    } else {
-        "localhost"
+    let args: Vec<String> = std::env::args().collect();
+    let program = args[0].clone();
+
+    let mut opts = Options::new();
+    opts.optopt("", "miner-id", "", "MINER_ID");
+    opts.optflag("", "help", "");
+    let matches = match opts.parse(&args[1..]) {
+        Ok(m) => m,
+        Err(f) => {
+            panic!("{}", f)
+        }
     };
-    let port = if args.len() >= 3 { &args[2] } else { "3030" };
-    let url = format!("http://{host}:{port}");
+    if matches.opt_present("help") {
+        usage(&program, &opts);
+        std::process::exit(1)
+    };
+    let miner_id = matches.opt_str("miner-id").unwrap_or_else(|| {
+        std::env::var("MINER_ID").unwrap_or_else(|_| {
+            println!("ERROR: use '--miner-id XXXX' or set the MINER_ID environment variable.");
+            usage(&program, &opts);
+            std::process::exit(1)
+        })
+    });
+    let url_str = if !matches.free.is_empty() {
+        matches.free[0].clone()
+    } else {
+        "http://localhost:3030".to_string()
+    };
+    let url = [
+        url_str.clone(),
+        format!("http://{}:3030", url_str),
+        format!("http://{}", url_str),
+    ]
+    .iter()
+    .flat_map(|s| url::Url::parse(s).ok())
+    .next()
+    .unwrap_or_else(|| {
+        println!("ERROR: use a valid mining pool URL");
+        usage(&program, &opts);
+        std::process::exit(1)
+    });
     #[cfg(not(feature = "gpu"))]
     let hasher = cpu::setup();
     #[cfg(feature = "gpu")]
     let hasher = gpu::setup().unwrap();
     let mut block_height = 0;
     let mut notify: Option<async_broadcast::Sender<()>> = None;
+    println!("Connecting to DOD mining pool at {}", url);
     loop {
-        let res = match minreq::get(&format!("{url}/job")).send() {
+        let mut job_url = url.clone();
+        job_url.set_path("job");
+        let res = match minreq::get(job_url.as_str()).send() {
             Err(err) => {
                 eprintln!("{}", err);
                 std::thread::sleep(std::time::Duration::from_millis(1000));
@@ -132,7 +172,7 @@ async fn main() {
 
 async fn start_round<T: Hasher>(
     hasher: T,
-    url: &str,
+    url: &url::Url,
     miner_id: &str,
     job: JobDesc,
     on_termination: OnTermination,
@@ -158,7 +198,9 @@ async fn start_round<T: Hasher>(
                     block_height,
                     nonce,
                 };
-                match minreq::post(&format!("{url}/answer"))
+                let mut post_url = url.clone();
+                post_url.set_path("answer");
+                match minreq::post(post_url.as_str())
                     .with_json(&res)
                     .unwrap()
                     .with_header("Content-Type", "application/json")

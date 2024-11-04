@@ -15,6 +15,8 @@ minreq = { version = "2.12.0", features = [ "json-using-serde" ] }
 serde_json = "1.0.128"
 ocl = { version = "0.19.7", optional = true }
 async-broadcast = "0.7.1"
+getopts = "0.2.21"
+url = "2.5.2"
 
 [features]
 gpu = ["ocl"]
