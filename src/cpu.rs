@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::{
     utils::{check_match, MatchResult},
-    HashCountSender, Job, ResultSender,
+    HashCountSender, Job, OnTermination, ResultSender,
 };
 
 async fn task(pre: u8, mask: u8, job: Job, tx: ResultSender, hr: HashCountSender) {
@@ -50,7 +50,7 @@ impl super::Hasher for Hasher {
     fn start_hashing(
         &self,
         job: Job,
-        on_termination: UnboundedReceiver<()>,
+        on_termination: OnTermination,
     ) -> (
         UnboundedReceiver<u64>,
         UnboundedReceiver<Option<MatchResult>>,
@@ -75,7 +75,7 @@ impl super::Hasher for Hasher {
     }
 }
 
-async fn monitor_termination(mut on_termination: UnboundedReceiver<()>, tx: ResultSender) {
+async fn monitor_termination(mut on_termination: OnTermination, tx: ResultSender) {
     on_termination.next().await;
     println!("termination detected");
     let _ = tx.unbounded_send(None).ok();
@@ -100,7 +100,7 @@ async fn test_start_hashing() {
         block_height: 123,
         submitted: false,
     };
-    let (_tx, rx) = unbounded();
+    let (_tx, rx) = async_broadcast::broadcast(1);
     let hasher = setup();
     let (_, mut nonce_rx) = hasher.start_hashing(job.into(), rx);
     let mut last_result = None;

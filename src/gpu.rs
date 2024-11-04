@@ -1,4 +1,4 @@
-use super::{HashCountSender, Job, ResultSender};
+use super::{HashCountSender, Job, OnTermination, ResultSender};
 use futures::channel::mpsc::{unbounded, UnboundedReceiver};
 use ocl::{
     enums::{DeviceInfo, DeviceInfoResult},
@@ -22,12 +22,12 @@ fn opencl_source() -> String {
 
 #[derive(Clone)]
 struct Hasher {
-    pro_que: ProQue,
+    pro_ques: Vec<ProQue>,
 }
 
 pub fn setup() -> ocl::Result<impl super::Hasher> {
     let ctx = Context::builder().devices(DeviceType::GPU).build()?;
-    let mut batch_size = 0;
+    let mut pro_ques = Vec::new();
     for (i, device) in ctx.devices().iter().enumerate() {
         let compute_units = match device.info(DeviceInfo::MaxComputeUnits)? {
             DeviceInfoResult::MaxComputeUnits(c) => c,
@@ -37,24 +37,29 @@ pub fn setup() -> ocl::Result<impl super::Hasher> {
             DeviceInfoResult::MaxWorkGroupSize(c) => c,
             _ => panic!("..."),
         };
-        batch_size += compute_units as usize * work_group_size;
         println!(
             "GPU device {}, compute_units = {} work_group_size = {}",
             i, compute_units, work_group_size
         );
+        let batch_size = compute_units as usize * work_group_size;
+        pro_ques.push(
+            ProQue::builder()
+                .src(opencl_source())
+                .device(device)
+                .dims(batch_size)
+                .build()?,
+        );
     }
-    let pro_que = ProQue::builder()
-        .src(opencl_source())
-        .device(DeviceType::GPU)
-        .dims(batch_size)
-        .build()?;
-    Ok(Hasher { pro_que })
+    if pro_ques.is_empty() {
+        panic!("No GPU detected");
+    }
+    Ok(Hasher { pro_ques })
 }
 
 fn task(
     job: Job,
     pro_que: ProQue,
-    mut on_termination: UnboundedReceiver<()>,
+    on_termination: OnTermination,
     tx: ResultSender,
     hr: HashCountSender,
 ) -> ocl::Result<()> {
@@ -94,9 +99,8 @@ fn task(
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis();
-        if on_termination.try_next().map_or(false, |x| x.is_some())
-            || now + 2000 > job.next_block_time as u128
-        {
+        if on_termination.is_closed() || now + 2000 > job.next_block_time as u128 {
+            println!("break");
             break;
         };
         let rng_seed: u64 = rng.next_u64();
@@ -161,15 +165,21 @@ impl super::Hasher for Hasher {
     fn start_hashing(
         &self,
         job: Job,
-        on_termination: UnboundedReceiver<()>,
+        on_termination: OnTermination,
     ) -> (
         UnboundedReceiver<u64>,
         UnboundedReceiver<Option<super::utils::MatchResult>>,
     ) {
         let (tx, rx) = unbounded();
         let (metrics_tx, metrics_rx) = unbounded();
-        let pro_que = self.pro_que.clone();
-        std::thread::spawn(move || task(job, pro_que, on_termination, tx, metrics_tx));
+        for pro_que in self.pro_ques.iter() {
+            let job = job.clone();
+            let pro_que = pro_que.clone();
+            let tx = tx.clone();
+            let metrics_tx = metrics_tx.clone();
+            let on_termination = on_termination.clone();
+            std::thread::spawn(move || task(job, pro_que, on_termination, tx, metrics_tx));
+        }
         (metrics_rx, rx)
     }
 }

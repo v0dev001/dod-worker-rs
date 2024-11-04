@@ -1,7 +1,6 @@
-use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
+use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
 
 #[cfg(not(feature = "gpu"))]
@@ -55,18 +54,18 @@ impl From<JobDesc> for Job {
     }
 }
 
-type SubmissionNotifier = Arc<RwLock<Option<UnboundedSender<()>>>>;
-
 // Sending `None` to signal the computation should be terminated
 type ResultSender = UnboundedSender<Option<utils::MatchResult>>;
 
 type HashCountSender = UnboundedSender<u64>;
 
+pub type OnTermination = async_broadcast::Receiver<()>;
+
 pub trait Hasher: Clone {
     fn start_hashing(
         &self,
         job: Job,
-        on_termination: UnboundedReceiver<()>,
+        on_termination: OnTermination,
     ) -> (
         UnboundedReceiver<u64>,
         UnboundedReceiver<Option<utils::MatchResult>>,
@@ -90,7 +89,7 @@ async fn main() {
     #[cfg(feature = "gpu")]
     let hasher = gpu::setup().unwrap();
     let mut block_height = 0;
-    let notify_submission: SubmissionNotifier = Arc::new(RwLock::new(None));
+    let mut notify: Option<async_broadcast::Sender<()>> = None;
     loop {
         let res = match minreq::get(&format!("{url}/job")).send() {
             Err(err) => {
@@ -110,21 +109,22 @@ async fn main() {
         };
         if req.block_height == block_height {
             if req.submitted {
-                if let Some(tx) = notify_submission.write().unwrap().take() {
+                if let Some(notify_submission) = notify.take() {
                     println!("Job submitted by others, terminating...");
-                    let _ = tx.unbounded_send(()).ok();
+                    notify_submission.close();
                 }
             }
             std::thread::sleep(std::time::Duration::from_millis(500));
         } else {
             block_height = req.block_height;
             println!("Starting new job {}", block_height);
+            let (notify_submission, on_termination) = async_broadcast::broadcast(1);
+            notify = Some(notify_submission);
             let hasher = hasher.clone();
             let url = url.clone();
-            let notify = Arc::clone(&notify_submission);
             let miner_id = miner_id.clone();
             std::thread::spawn(move || {
-                async_std::task::block_on(start_round(hasher, &url, &miner_id, req, notify))
+                async_std::task::block_on(start_round(hasher, &url, &miner_id, req, on_termination))
             });
         }
     }
@@ -135,14 +135,12 @@ async fn start_round<T: Hasher>(
     url: &str,
     miner_id: &str,
     job: JobDesc,
-    notify: SubmissionNotifier,
+    on_termination: OnTermination,
 ) {
     let begin = SystemTime::now();
     let block_height = job.block_height;
-    let (tx, rx) = unbounded();
-    *notify.write().unwrap() = Some(tx);
     let pre = job.pre;
-    let (hash_count_rx, mut nonce_rx) = hasher.start_hashing(job.into(), rx);
+    let (hash_count_rx, mut nonce_rx) = hasher.start_hashing(job.into(), on_termination.clone());
     let mut last_result = None;
     while let Some(Some(result)) = nonce_rx.next().await {
         if result.better_than(last_result.as_ref()) {
@@ -172,9 +170,6 @@ async fn start_round<T: Hasher>(
                     }
                     Ok(res) => {
                         println!("Job {} submitted: {}", block_height, res.as_str().unwrap());
-                        if result.fully_matched {
-                            *notify.write().unwrap() = None;
-                        }
                     }
                 }
                 if result.fully_matched {
@@ -186,10 +181,7 @@ async fn start_round<T: Hasher>(
     drop(nonce_rx);
     let count: u64 = hash_count_rx.collect::<Vec<_>>().await.into_iter().sum();
     let duration = SystemTime::now().duration_since(begin).unwrap().as_millis();
-    if duration > 0 { println!("Hashrate: {}/s", count as u128 * 1000 / duration); }
-    /*
-        if !found {
-            println!("Job {} aborted", block_height);
-        }
-    */
+    if duration > 0 {
+        println!("Hashrate: {}/s", count as u128 * 1000 / duration);
+    }
 }
