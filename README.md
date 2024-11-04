@@ -20,6 +20,8 @@ The `MINER_ID` is how you identifier yourself with the mining pool.
 Or in other words, the mining pool decides whom to pay based on the `MINER_ID`.
 You can run multiple workers under the same `MINER_ID`.
 
+Please also set the clock on your machine properly, because the worker depends on it for work submission.
+
 **Protocol**
 
 This part is technical detail, and only useful if you are building a mining pool.
