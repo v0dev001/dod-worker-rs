@@ -57,20 +57,24 @@ impl super::Hasher for Hasher {
     ) {
         let (tx, rx) = unbounded();
         let (metrics_tx, metrics_rx) = unbounded();
-        let mut bits = 0;
-        let mut max_threads = num_cpus::get();
-        
-        println!("max_threads = {}", max_threads);
+
+        // Use all available threads
+        let max_threads = num_cpus::get();
+        let bits = (8 - (max_threads as f64).log2().ceil() as u8).max(1); // Ensure bits >= 1
+        println!("max_threads = {}, bits = {}", max_threads, bits);
+
         for i in 0..max_threads {
-            let pre = (i as u8) << (8 - bits);
-            let mask = (1 << (8 - bits)) - 1;
+            let pre = (i as u8) << bits;
+            let mask = (1 << bits) - 1;
             self.pool
                 .spawn_ok(task(pre, mask, job.clone(), tx.clone(), metrics_tx.clone()))
         }
+
         self.pool.spawn_ok(monitor_termination(on_termination, tx));
         (metrics_rx, rx)
     }
 }
+
 
 async fn monitor_termination(mut on_termination: OnTermination, tx: ResultSender) {
     on_termination.next().await;
