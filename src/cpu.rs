@@ -58,12 +58,9 @@ impl super::Hasher for Hasher {
         let (tx, rx) = unbounded();
         let (metrics_tx, metrics_rx) = unbounded();
         let mut bits = 0;
-        let mut max_threads = 1;
-        while max_threads * 2 < num_cpus::get() {
-            bits += 1;
-            max_threads = max_threads * 2;
-        }
-        println!("bits = {}, max_threads = {}", bits, max_threads);
+        let mut max_threads = num_cpus::get();
+        
+        println!("max_threads = {}", max_threads);
         for i in 0..max_threads {
             let pre = (i as u8) << (8 - bits);
             let mask = (1 << (8 - bits)) - 1;
